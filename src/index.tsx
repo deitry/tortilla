@@ -3,7 +3,30 @@ import ReactDOM from 'react-dom';
 import './index.css';
 
 
-function Square(props) {
+enum Player {
+  X = 'X',
+  O = 'O',
+}
+
+type SquareState = Player | null;
+
+
+function getPlayerByStep(step: number): Player {
+  // https://stackoverflow.com/questions/18111657/how-to-get-names-of-enum-entries
+  // https://stackoverflow.com/questions/17380845/how-do-i-convert-a-string-to-enum-in-typescript
+
+  let players = Object.keys(Player);
+  let index = step % players.length;
+  let playerByIdx = players[index] as keyof typeof Player;
+  return Player[playerByIdx];
+}
+
+interface SquareProps {
+  onClick: (() => void),
+  value: SquareState,
+}
+
+function Square(props: SquareProps) {
   return (
     <button
       className="square"
@@ -14,8 +37,13 @@ function Square(props) {
   );
 }
 
-class Board extends React.Component {
-  renderSquare(i) {
+interface BoardProps {
+  squares: SquareState[],
+  onClick: ((i: number) => void),
+}
+
+class Board extends React.Component<BoardProps, {}> {
+  renderSquare(i: number) {
     return (
       <Square
         value={this.props.squares[i]}
@@ -50,40 +78,50 @@ class Board extends React.Component {
   }
 }
 
-class Game extends React.Component {
-  constructor(props) {
+interface GameState {
+    squares: SquareState[],
+}
+
+interface GameProps {
+  history: GameState[],
+  stepNumber: number,
+  nextPlayer: Player
+}
+
+class Game extends React.Component<{}, GameProps> {
+  constructor(props: {}) {
     super(props);
     this.state = {
       history: [{
         squares: Array(9).fill(null),
       }],
       stepNumber: 0,
-      xIsNext: true,
+      nextPlayer: Player.X,
     };
   }
 
-  jumpTo(step) {
+  jumpTo(step: number) {
     this.setState({
       stepNumber: step,
-      xIsNext: (step % 2) === 0,
+      nextPlayer: getPlayerByStep(step),
     });
   }
 
-  handleClick(i) {
+  handleClick(i: number) {
     const history = this.state.history.slice(0, this.state.stepNumber + 1);
     const current = history[history.length - 1];
     const squares = current.squares.slice();
 
     if (calculateWinner(squares) || squares[i]) return;
 
-    squares[i] = this.state.xIsNext ? 'X' : 'O';
+    squares[i] = this.state.nextPlayer;
     this.setState({
       // NOTE: concat не изменяет оригинальный массив в отличие от push
       history: history.concat([{
         squares: squares,
       }]),
       stepNumber: history.length,
-      xIsNext: !this.state.xIsNext,
+      nextPlayer: getPlayerByStep(history.length),
     });
   }
 
@@ -92,7 +130,7 @@ class Game extends React.Component {
     const current = history[this.state.stepNumber];
     const winner = calculateWinner(current.squares);
 
-    const moves = history.map((step, move) => {
+    const moves = history.map((_: GameState, move: number) => {
       const desc = move ?
         'Перейти к ходу #' + move :
         'К началу игры';
@@ -107,9 +145,9 @@ class Game extends React.Component {
     if (winner) {
       status = 'Выиграл ' + winner;
     } else if (this.state.stepNumber === 9) {
-      status = 'Ничья';
+      status = 'Ничья!';
     } else {
-      status = 'Следующий ход: ' + (this.state.xIsNext ? 'X' : 'O');
+      status = 'Следующий ход: ' + this.state.nextPlayer;
     }
 
     return (
@@ -117,7 +155,7 @@ class Game extends React.Component {
         <div className="game-board">
           <Board
             squares={current.squares}
-            onClick={(i) => this.handleClick(i)}
+            onClick={(i: number) => this.handleClick(i)}
           />
         </div>
         <div className="game-info">
@@ -136,7 +174,7 @@ ReactDOM.render(
   document.getElementById('root')
 );
 
-function calculateWinner(squares) {
+function calculateWinner(squares: SquareState[]) {
   const lines = [
     [0, 1, 2],
     [3, 4, 5],
