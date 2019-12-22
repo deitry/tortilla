@@ -3,6 +3,15 @@ import ReactDOM from 'react-dom';
 import './index.css';
 
 
+// Board sizes
+const BOARD_WIDTH: number = 5;
+const BOARD_HEIGHT: number = 5;
+
+// How many items in the line should be to win
+const WIN_SEQ = 4;
+const DEBUG = false;
+
+
 enum Player {
   X = 'X',
   O = 'O',
@@ -23,7 +32,7 @@ function getPlayerByStep(step: number): Player {
 
 interface SquareProps {
   onClick: (() => void),
-  value: SquareState,
+  value: SquareState | number, // number is for debug
 }
 
 function Square(props: SquareProps) {
@@ -46,33 +55,35 @@ class Board extends React.Component<BoardProps, {}> {
   renderSquare(i: number) {
     return (
       <Square
-        value={this.props.squares[i]}
+        // for DEBUG: replace null with i
+        value={this.props.squares[i] ? this.props.squares[i]
+                                     : (DEBUG ? i
+                                              : null)}
         onClick={() => this.props.onClick(i)}
       />
     );
   }
 
-  // циклы в React
-  // https://blog.cloudboost.io/for-loops-in-react-render-no-you-didnt-6c9f4aa73778
+  renderRow(startIndex: number) {
+    let items = [];
+    for (let i = 0; i < BOARD_WIDTH; ++i) {
+      items.push(this.renderSquare(startIndex * BOARD_WIDTH + i));
+    }
+    return (
+      <div className="board-row">
+        {items}
+      </div>
+    );
+  }
 
   render() {
+    let rows = [];
+    for (let i = 0; i < BOARD_HEIGHT; ++i) {
+      rows.push(this.renderRow(i));
+    }
     return (
       <div>
-        <div className="board-row">
-          {this.renderSquare(0)}
-          {this.renderSquare(1)}
-          {this.renderSquare(2)}
-        </div>
-        <div className="board-row">
-          {this.renderSquare(3)}
-          {this.renderSquare(4)}
-          {this.renderSquare(5)}
-        </div>
-        <div className="board-row">
-          {this.renderSquare(6)}
-          {this.renderSquare(7)}
-          {this.renderSquare(8)}
-        </div>
+        {rows}
       </div>
     );
   }
@@ -93,7 +104,7 @@ class Game extends React.Component<{}, GameProps> {
     super(props);
     this.state = {
       history: [{
-        squares: Array(9).fill(null),
+        squares: Array(BOARD_WIDTH * BOARD_HEIGHT).fill(null),
       }],
       stepNumber: 0,
       nextPlayer: Player.X,
@@ -141,10 +152,12 @@ class Game extends React.Component<{}, GameProps> {
       );
     });
 
+    let info = "Клеток в ряду для победы: " + WIN_SEQ.toString();
+
     let status;
     if (winner) {
       status = 'Выиграл ' + winner;
-    } else if (this.state.stepNumber === 9) {
+    } else if (this.state.stepNumber === BOARD_WIDTH * BOARD_HEIGHT) {
       status = 'Ничья!';
     } else {
       status = 'Следующий ход: ' + this.state.nextPlayer;
@@ -159,6 +172,7 @@ class Game extends React.Component<{}, GameProps> {
           />
         </div>
         <div className="game-info">
+          <div>{info}</div>
           <div>{status}</div>
           <ol>{moves}</ol>
         </div>
@@ -174,23 +188,100 @@ ReactDOM.render(
   document.getElementById('root')
 );
 
-function calculateWinner(squares: SquareState[]) {
-  const lines = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6],
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    const [a, b, c] = lines[i];
-    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-      return squares[a];
+// FIXME: предварительно вычислять и сохранять. Или придумать решение получше
+function* horizontals() {
+  // FIXME: упростить генераторы, обобщить?
+  let horizontalIndex = (i: number, j: number, z: number) => {
+    return i*BOARD_WIDTH + j + z;
+  };
+  for (let i = 0; i < BOARD_HEIGHT; ++i) {
+    for (let j = 0; j < BOARD_WIDTH - WIN_SEQ + 1; ++j) {
+      // console.log("horizontal", i, j);
+      let line = [];
+      for (let z = 0; z < WIN_SEQ; ++z) {
+        line.push(horizontalIndex(i, j, z));
+      }
+      yield line;
     }
+  }
+}
+
+function* verticals() {
+  for (let i = 0; i < BOARD_HEIGHT - WIN_SEQ + 1; ++i) {
+    for (let j = 0; j < BOARD_WIDTH; ++j) {
+      // console.log("vertical", i, j)
+      let line = [];
+      for (let z = 0; z < WIN_SEQ; ++z) {
+        line.push(j + (i + z) * BOARD_WIDTH);
+      }
+      yield line;
+    }
+  }
+}
+
+function* diagonalsDown() {
+  for (let i = 0; i < BOARD_HEIGHT - WIN_SEQ + 1; ++i) {
+    for (let j = 0; j < BOARD_WIDTH - WIN_SEQ + 1; ++j) {
+      // console.log("diagDown", i, j);
+      let line = [];
+      for (let z = 0; z < WIN_SEQ; ++z) {
+        line.push(j + (i + z) * BOARD_WIDTH + z);
+      }
+      yield line;
+    }
+  }
+}
+
+function* diagonalsUp() {
+  for (let i = WIN_SEQ - 1; i < BOARD_HEIGHT; ++i) {
+    for (let j = 0; j < BOARD_WIDTH - WIN_SEQ + 1; ++j) {
+      // console.log("diagUp", i, j)
+      let line = [];
+      for (let z = 0; z < WIN_SEQ; ++z) {
+        line.push(j + (i - z) * BOARD_WIDTH + z);
+      }
+      yield line;
+    }
+  }
+}
+
+function calculateWinner(squares: SquareState[]) {
+
+  let checkRule = (rule: Generator<number[], void, unknown>): Player | null => {
+    while (true) {
+      let line = rule.next();
+      // console.log(line.value)
+
+      if (line.done || line.value.length === 0) break;
+      // console.log("line", line);
+
+      // check conditions
+      let cur = squares[line.value[0]];
+      if (!cur) continue;
+
+      let isCorrect = true;
+      for (let i = 1; i < line.value.length; ++i) {
+        if (squares[line.value[i]] !== cur) {
+          isCorrect = false;
+          break;
+        }
+      }
+      // console.log("isCorrect", isCorrect);
+      if (isCorrect) return cur;
+    }
+
+    return null;
+  };
+
+  let winner: Player | null = null;
+  let rules = [
+    horizontals,
+    verticals,
+    diagonalsDown,
+    diagonalsUp,
+  ];
+  for (let rule of rules) {
+    if (winner = checkRule(rule())) return winner;
   }
   return null;
 }
