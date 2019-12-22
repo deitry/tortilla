@@ -56,6 +56,7 @@ class Board extends React.Component<BoardProps, {}> {
     return (
       <Square
         // for DEBUG: replace null with i
+        key={i}
         value={this.props.squares[i] ? this.props.squares[i]
                                      : (DEBUG ? i
                                               : null)}
@@ -70,7 +71,7 @@ class Board extends React.Component<BoardProps, {}> {
       items.push(this.renderSquare(startIndex * BOARD_WIDTH + i));
     }
     return (
-      <div className="board-row">
+      <div className="board-row" key={startIndex}>
         {items}
       </div>
     );
@@ -273,7 +274,6 @@ function calculateWinner(squares: SquareState[]) {
     return null;
   };
 
-  let winner: Player | null = null;
   let rules = [
     horizontals,
     verticals,
@@ -281,7 +281,8 @@ function calculateWinner(squares: SquareState[]) {
     diagonalsUp,
   ];
   for (let rule of rules) {
-    if (winner = checkRule(rule())) return winner;
+    let winner = checkRule(rule());
+    if (winner) return winner;
   }
   return null;
 }
